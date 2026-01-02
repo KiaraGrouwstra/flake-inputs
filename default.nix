@@ -73,93 +73,97 @@ rec {
   */
   fetchTree =
     info:
-    if info.type == "github" then
-      {
-        outPath = fetchTarball (
+    let
+      attrs =
+        if info.type == "github" then
           {
-            url = "https://api.${info.host or "github.com"}/repos/${info.owner}/${info.repo}/tarball/${info.rev}";
-          }
-          // (if info ? narHash then { sha256 = info.narHash; } else { })
-        );
-        rev = info.rev;
-        shortRev = builtins.substring 0 7 info.rev;
-        lastModified = info.lastModified;
-        lastModifiedDate = format-timestamp info.lastModified;
-        narHash = info.narHash;
-      }
-    else if info.type == "git" then
-      {
-        outPath = builtins.fetchGit (
-          {
-            url = info.url;
-            shallow = true;
-            allRefs = true;
-          }
-          // (if info ? rev then { inherit (info) rev; } else { })
-          // (if info ? ref then { inherit (info) ref; } else { })
-          // (if info ? submodules then { inherit (info) submodules; } else { })
-        );
-        lastModified = info.lastModified;
-        lastModifiedDate = format-timestamp info.lastModified;
-        narHash = info.narHash;
-        revCount = info.revCount or 0;
-      }
-      // (
-        if info ? rev then
-          {
+            outPath = fetchTarball (
+              {
+                url = "https://api.${info.host or "github.com"}/repos/${info.owner}/${info.repo}/tarball/${info.rev}";
+              }
+              // (if info ? narHash then { sha256 = info.narHash; } else { })
+            );
             rev = info.rev;
             shortRev = builtins.substring 0 7 info.rev;
+            lastModified = info.lastModified;
+            lastModifiedDate = format-timestamp info.lastModified;
+            narHash = info.narHash;
           }
-        else
-          { }
-      )
-    else if info.type == "path" then
-      {
-        outPath = builtins.path {
-          path =
-            if
-              builtins.substring 0 1 info.path != "/"
-            # XXX: Relative paths require an additional `src` attribute!
-            #      This is supplied when being called by our own `import-flake`, but may not work elsewhere
-            then
-              "${info.src}/${info.path}"
+        else if info.type == "git" then
+          {
+            outPath = builtins.fetchGit (
+              {
+                url = info.url;
+                shallow = true;
+                allRefs = true;
+              }
+              // (if info ? rev then { inherit (info) rev; } else { })
+              // (if info ? ref then { inherit (info) ref; } else { })
+              // (if info ? submodules then { inherit (info) submodules; } else { })
+            );
+            lastModified = info.lastModified;
+            lastModifiedDate = format-timestamp info.lastModified;
+            narHash = info.narHash;
+            revCount = info.revCount or 0;
+          }
+          // (
+            if info ? rev then
+              {
+                rev = info.rev;
+                shortRev = builtins.substring 0 7 info.rev;
+              }
             else
-              info.path;
-          sha256 = info.narHash;
-        };
-        narHash = info.narHash;
-      }
-    else if info.type == "tarball" then
-      {
-        outPath = fetchTarball (
-          { inherit (info) url; } // (if info ? narHash then { sha256 = info.narHash; } else { })
-        );
-      }
-    else if info.type == "gitlab" then
-      {
-        inherit (info) rev narHash lastModified;
-        outPath = fetchTarball (
+              { }
+          )
+        else if info.type == "path" then
           {
-            url = "https://${info.host or "gitlab.com"}/api/v4/projects/${info.owner}%2F${info.repo}/repository/archive.tar.gz?sha=${info.rev}";
+            outPath = builtins.path {
+              path =
+                if
+                  builtins.substring 0 1 info.path != "/"
+                # XXX: Relative paths require an additional `src` attribute!
+                #      This is supplied when being called by our own `import-flake`, but may not work elsewhere
+                then
+                  "${info.src}/${info.path}"
+                else
+                  info.path;
+              sha256 = info.narHash;
+            };
+            narHash = info.narHash;
           }
-          // (if info ? narHash then { sha256 = info.narHash; } else { })
-        );
-        shortRev = builtins.substring 0 7 info.rev;
-      }
-    else if info.type == "sourcehut" then
-      {
-        inherit (info) rev narHash lastModified;
-        outPath = fetchTarball (
+        else if info.type == "tarball" then
           {
-            url = "https://${info.host or "git.sr.ht"}/${info.owner}/${info.repo}/archive/${info.rev}.tar.gz";
+            outPath = fetchTarball (
+              { inherit (info) url; } // (if info ? narHash then { sha256 = info.narHash; } else { })
+            );
           }
-          // (if info ? narHash then { sha256 = info.narHash; } else { })
-        );
-        shortRev = builtins.substring 0 7 info.rev;
-      }
-    # TODO: Mercurial, tarball inputs, ...
-    else
-      throw "flake input has unsupported input type '${info.type}'";
+        else if info.type == "gitlab" then
+          {
+            inherit (info) rev narHash lastModified;
+            outPath = fetchTarball (
+              {
+                url = "https://${info.host or "gitlab.com"}/api/v4/projects/${info.owner}%2F${info.repo}/repository/archive.tar.gz?sha=${info.rev}";
+              }
+              // (if info ? narHash then { sha256 = info.narHash; } else { })
+            );
+            shortRev = builtins.substring 0 7 info.rev;
+          }
+        else if info.type == "sourcehut" then
+          {
+            inherit (info) rev narHash lastModified;
+            outPath = fetchTarball (
+              {
+                url = "https://${info.host or "git.sr.ht"}/${info.owner}/${info.repo}/archive/${info.rev}.tar.gz";
+              }
+              // (if info ? narHash then { sha256 = info.narHash; } else { })
+            );
+            shortRev = builtins.substring 0 7 info.rev;
+          }
+        # TODO: Mercurial, tarball inputs, ...
+        else
+          throw "flake input has unsupported input type '${info.type}'";
+    in
+    attrs // { dirtyRev = attrs.rev; };
 
   /**
     Import a flake from stable Nix.
@@ -194,6 +198,7 @@ rec {
               if res.rev == "0000000000000000000000000000000000000000" then
                 removeAttrs res [
                   "rev"
+                  "dirtyRev"
                   "shortRev"
                 ]
               else
